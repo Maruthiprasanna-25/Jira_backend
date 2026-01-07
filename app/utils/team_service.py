@@ -1,0 +1,126 @@
+from sqlalchemy.orm import Session, joinedload
+from fastapi import HTTPException
+from app.models import Team, User, Project
+from app.schemas import TeamCreate, TeamUpdate
+
+def team_to_dict(t):
+    if not t: return None
+    return {
+        "id": t.id,
+        "name": t.name,
+        "project_id": t.project_id,
+        "lead_id": t.lead_id,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        "members": [
+            {
+                "id": m.id,
+                "username": m.username,
+                "email": m.email,
+                "role": m.role,
+                "profile_pic": m.profile_pic,
+                "created_at": m.created_at.isoformat() if m.created_at else None
+            } for m in t.members
+        ],
+        "lead": {
+            "id": t.lead.id,
+            "username": t.lead.username,
+            "email": t.lead.email,
+            "role": t.lead.role,
+            "profile_pic": t.lead.profile_pic,
+            "created_at": t.lead.created_at.isoformat() if t.lead.created_at else None
+        } if t.lead else None
+    }
+
+def create_team(db: Session, team_data: TeamCreate):
+    # Verify project exists
+    project = db.query(Project).filter(Project.id == team_data.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Verify lead exists if provided
+    if team_data.lead_id:
+        lead = db.query(User).filter(User.id == team_data.lead_id).first()
+        if not lead:
+            raise HTTPException(status_code=404, detail="Team Lead not found")
+    
+    team = Team(
+        name=team_data.name,
+        project_id=team_data.project_id,
+        lead_id=team_data.lead_id
+    )
+    
+    db.add(team)
+    db.flush() 
+    
+    if team_data.member_ids:
+        members = db.query(User).filter(User.id.in_(team_data.member_ids)).all()
+        if len(members) != len(team_data.member_ids):
+             raise HTTPException(status_code=400, detail="Some member IDs are invalid")
+        # Use assignment for many-to-many to be more robust
+        team.members = members
+    
+    db.commit()
+    
+    # Return with eager loading to ensure serialization success
+    result = db.query(Team).options(
+        joinedload(Team.members), 
+        joinedload(Team.lead)
+    ).filter(Team.id == team.id).first()
+    return team_to_dict(result)
+
+def get_team(db: Session, team_id: int):
+    team = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    return team_to_dict(team)
+
+def get_teams_by_project(db: Session, project_id: int):
+    teams = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).filter(Team.project_id == project_id).all()
+    return [team_to_dict(t) for t in teams]
+
+def update_team(db: Session, team_id: int, team_update: TeamUpdate):
+    # Fetch the Team model directly (not the dict from get_team)
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    if team_update.name:
+        team.name = team_update.name
+    
+    if team_update.lead_id is not None:
+        lead = db.query(User).filter(User.id == team_update.lead_id).first()
+        if not lead:
+             raise HTTPException(status_code=404, detail="New Team Lead not found")
+        team.lead_id = team_update.lead_id
+
+    if team_update.member_ids is not None:
+        members = db.query(User).filter(User.id.in_(team_update.member_ids)).all()
+        team.members = members
+
+    db.commit()
+    db.refresh(team)
+    
+    # Return with eager loading to ensure complete data
+    updated_team = db.query(Team).options(
+        joinedload(Team.members),
+        joinedload(Team.lead)
+    ).filter(Team.id == team_id).first()
+    
+    return team_to_dict(updated_team)
+
+def delete_team(db: Session, team_id: int):
+    team = db.query(Team).filter(Team.id == team_id).first()
+
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    db.delete(team)        # ✅ ORM instance
+    db.commit()
+
+    return True
+
+
+def get_all_teams(db: Session):
+    teams = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).all()
+    return [team_to_dict(t) for t in teams]
