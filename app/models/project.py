@@ -11,12 +11,15 @@ class Project(Base):
     name = Column(String(100), unique=True, nullable=False)
     project_prefix = Column(String(5), nullable=False)
     current_story_number = Column(Integer, default=1)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Temporarily nullable for migration
 
     stories = relationship(
         "UserStory",
         back_populates="project",
         cascade="all, delete-orphan"
     )
+
+    owner = relationship("User")
 
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())

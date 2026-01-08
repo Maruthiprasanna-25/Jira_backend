@@ -1,16 +1,24 @@
 import logging
-# Fix for passlib/bcrypt incompatibility
-logging.getLogger('passlib').setLevel(logging.ERROR)
 from datetime import datetime, timedelta
+import re
+
+from fastapi import HTTPException
 from jose import jwt
 from passlib.context import CryptContext
-import re
-from fastapi import HTTPException
+from passlib.exc import UnknownHashError
 
 from app.config.settings import settings
 
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+# Reduce passlib noise
+logging.getLogger("passlib").setLevel(logging.ERROR)
 
+# ✅ Support BOTH hash formats safely
+pwd_context = CryptContext(
+    schemes=["bcrypt", "bcrypt_sha256"],
+    deprecated="auto"
+)
+
+# ---------------- PASSWORD VALIDATION ---------------- #
 
 def validate_password(password: str):
     if len(password) < 8:
@@ -45,20 +53,37 @@ def validate_password(password: str):
 
 def validate_lowercase_email(email: str):
     if email != email.lower():
-        raise HTTPException(400, "Email must be in lowercase")
+        raise HTTPException(
+            status_code=400,
+            detail="Email must be in lowercase"
+        )
+
+# ---------------- PASSWORD HASHING ---------------- #
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
+def verify_password(password: str, hashed_password: str) -> bool:
+    try:
+        return pwd_context.verify(password, hashed_password)
+    except UnknownHashError:
+        # Database contains invalid hash
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid password hash stored in database"
+        )
 
-
-def verify_password(password: str, hashed: str) -> bool:
-    return pwd_context.verify(password, hashed)
-
-
+# ---------------- JWT TOKEN ---------------- #
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    return jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )

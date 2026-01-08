@@ -7,6 +7,8 @@ class ProjectResponse(BaseModel):
     id: int
     name: str
     project_prefix: str
+    owner_id: Optional[int] = None
+    owner: Optional[UserResponse] = None
 
     class Config:
         from_attributes = True

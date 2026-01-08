@@ -338,9 +338,14 @@ def get_all_stories(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    if user.role == "ADMIN":
+    if user.is_master_admin:
         stories = db.query(UserStory).all()
+    elif user.view_mode == "ADMIN":
+        # ADMIN mode: Shows stories from projects you own
+        owned_project_ids = [p.id for p in db.query(Project).filter(Project.owner_id == user.id).all()]
+        stories = db.query(UserStory).filter(UserStory.project_id.in_(owned_project_ids)).all()
     else:
+        # DEVELOPER mode: Shows stories where you're a member/assignee (excluding owned projects)
         led_project_ids = [t.project_id for t in user.led_teams]
         member_team_ids = [t.id for t in user.teams]
         assigned_project_ids = [
@@ -351,13 +356,18 @@ def get_all_stories(
             .all()
         ]
         
+        all_relevant_project_ids = list(set(led_project_ids + assigned_project_ids))
+        
+        # User's own projects (to exclude)
+        owned_project_ids = [p.id for p in db.query(Project).filter(Project.owner_id == user.id).all()]
+        
         stories = db.query(UserStory).filter(
             or_(
                 UserStory.assignee_id == user.id,
                 UserStory.team_id.in_(member_team_ids),
-                UserStory.project_id.in_(led_project_ids),
-                UserStory.project_id.in_(assigned_project_ids)
-            )
+                UserStory.project_id.in_(all_relevant_project_ids)
+            ),
+            UserStory.project_id.notin_(owned_project_ids)
         ).all()
     
     return [story_to_dict(s) for s in stories]

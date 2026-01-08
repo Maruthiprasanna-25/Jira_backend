@@ -1,17 +1,28 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class SignupRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    role: Optional[str] = "DEVELOPER"
+
 class UserUpdate(BaseModel):
     username: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     password: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int
     username: str
-    email: EmailStr
+    email: str
     role: str
+    view_mode: str
     profile_pic: Optional[str]
     created_at: datetime
 
@@ -32,3 +43,7 @@ class NotificationResponse(BaseModel):
 
 class NotificationCount(BaseModel):
     unread_count: int
+
+class ModeSwitchRequestSchema(BaseModel):
+    requested_mode: str
+    reason: str

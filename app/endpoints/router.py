@@ -6,7 +6,9 @@ from app.endpoints.v1 import (
     stories_api,
     teams_api,
     notifications_api,
-    password_reset_api
+    password_reset_api,
+    mode_switch_api,
+    stats_api
 )
 
 api_router = APIRouter()
@@ -18,3 +20,5 @@ api_router.include_router(stories_api.router)
 api_router.include_router(teams_api.router)
 api_router.include_router(notifications_api.router)
 api_router.include_router(password_reset_api.router)
+api_router.include_router(mode_switch_api.router)
+api_router.include_router(stats_api.router)

@@ -3,6 +3,7 @@ import shutil
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Form, File, UploadFile
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -16,37 +17,35 @@ from app.auth.auth_utils import (
 )
 from app.auth.dependencies import get_current_user
 from app.config.settings import settings
+from app.schemas.user_schema import LoginRequest, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-ALLOWED_ROLES = ["ADMIN", "DEVELOPER", "TESTER", "OTHER"]
+ALLOWED_ROLES = ["ADMIN", "DEVELOPER", "TESTER"]
 
 @router.post("/signup")
 def signup(
-    username: str,
-    email: str,
-    password: str,
-    role: Optional[str] = "DEVELOPER",
+    request: SignupRequest,
     db: Session = Depends(get_db)
 ):
-    allowed_roles = ["DEVELOPER", "TESTER", "OTHER"]
+    allowed_roles = ["DEVELOPER", "TESTER"]
     
-    if role not in allowed_roles:
-        if role == "ADMIN":
+    if request.role not in allowed_roles:
+        if request.role == "ADMIN":
             raise HTTPException(status_code=403, detail="ADMIN role cannot be chosen during signup")
-        role = "DEVELOPER"
+        request.role = "DEVELOPER"
     
-    if db.query(User).filter(User.email == email).first():
+    if db.query(User).filter(User.email == request.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    validate_password(password)
-    validate_lowercase_email(email)
+    validate_password(request.password)
+    validate_lowercase_email(request.email)
     
     user = User(
-        username=username,
-        email=email,
-        hashed_password=hash_password(password),
-        role=role
+        username=request.username,
+        email=request.email,
+        hashed_password=hash_password(request.password),
+        role=request.role
     )
     
     db.add(user)
@@ -63,15 +62,16 @@ def get_all_users(
     """Retrieve all users to populate assignee lists"""
     return db.query(User).all()
 
-@router.post("/login")
-def login(
-    email: str,
-    password: str,
-    db: Session = Depends(get_db)
-):
+def perform_login(email: str, password: str, db: Session):
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Default view_mode based on role on fresh login
+    if not user.is_master_admin:
+        # If user is an ADMIN (promoted), default to ADMIN mode. Otherwise DEVELOPER.
+        user.view_mode = "ADMIN" if user.role == "ADMIN" else "DEVELOPER"
+        db.commit()
     
     token = create_access_token({
         "user_id": user.id,
@@ -82,8 +82,25 @@ def login(
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
-        "role": user.role
+        "role": user.role,
+        "view_mode": user.view_mode,
+        "is_master_admin": user.is_master_admin
     }
+
+@router.post("/login")
+def login(
+    request: LoginRequest,
+    db: Session = Depends(get_db)
+):
+    return perform_login(request.email, request.password, db)
+
+@router.post("/token")
+def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """OAuth2 compatible token login, for Swagger UI"""
+    return perform_login(form_data.username, form_data.password, db)
 
 @router.get("/me")
 def my_profile(user: User = Depends(get_current_user)):
@@ -92,9 +109,27 @@ def my_profile(user: User = Depends(get_current_user)):
         "username": user.username,
         "email": user.email,
         "role": user.role,
+        "view_mode": user.view_mode,
+        "is_master_admin": user.is_master_admin,
         "profile_pic": user.profile_pic,
         "created_at": user.created_at
     }
+
+@router.post("/switch-mode")
+def switch_mode(
+    mode: str = Form(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if user.is_master_admin:
+        raise HTTPException(400, "Master Admin cannot switch modes")
+    
+    if mode not in ["ADMIN", "DEVELOPER"]:
+        raise HTTPException(400, "Invalid mode")
+        
+    user.view_mode = mode
+    db.commit()
+    return {"message": f"Switched to {mode} mode", "view_mode": user.view_mode}
 
 @router.put("/me")
 def update_profile(

@@ -2,6 +2,7 @@ from app.models.user import User, PasswordResetToken, Notification
 from app.models.project import Project, Team
 from app.models.story import UserStory, UserStoryActivity
 from app.models.common import team_members
+from app.models.mode_switch_request import ModeSwitchRequest
 
 # Export everything for easy access
 __all__ = [
@@ -11,6 +12,7 @@ __all__ = [
     "Project",
     "Team",
     "UserStory",
-    "UserStoryActivity",
-    "team_members"
+    "ActivityLog",
+    "team_members",
+    "ModeSwitchRequest"
 ]

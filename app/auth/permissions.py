@@ -132,6 +132,11 @@ def is_admin(user: User):
 def is_project_lead(user: User, project_id: int, db: Session):
     if is_admin(user):
         return True
+    
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project and project.owner_id == user.id:
+        return True
+        
     # A Project Lead is defined as anyone who leads at least ONE team in that project
     return db.query(Team).filter(Team.project_id == project_id, Team.lead_id == user.id).count() > 0
 

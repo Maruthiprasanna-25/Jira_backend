@@ -17,11 +17,16 @@ def create_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    if user.role != "ADMIN":
-        raise HTTPException(403, "Only admins can create projects")
+    # Check if user is in ADMIN mode
+    # Master Admin is always in ADMIN mode as per auth_api update
+    if user.view_mode != "ADMIN":
+        raise HTTPException(status_code=403, detail="Developers cannot create projects. Please switch to Admin Mode.")
+
+    # Any user in ADMIN mode can create projects
     project = Project(
         name=name,
-        project_prefix=project_prefix.upper()
+        project_prefix=project_prefix.upper(),
+        owner_id=user.id
     )
     if project.current_story_number is None:
             project.current_story_number = 1
@@ -76,9 +81,15 @@ def get_projects(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
-    if user.role == "ADMIN":
+    if user.is_master_admin:
+        # Master Admin sees everything
         projects = db.query(Project).all()
+    elif user.view_mode == "ADMIN":
+        # ADMIN mode: Shows projects you own
+        projects = db.query(Project).filter(Project.owner_id == user.id).all()
     else:
+        # DEVELOPER mode: Shows projects where you're a member/assignee (excluding owned projects)
+        
         # Projects where user is assigned stories
         assigned_project_ids = [pid[0] for pid in db.query(UserStory.project_id)
             .filter(or_(
@@ -89,21 +100,26 @@ def get_projects(
             .distinct()
             .all()]
         
-        # Projects where user is a Team Lead
-        led_project_ids = [pid[0] for pid in db.query(Team.project_id)
-            .filter(Team.lead_id == user.id)
-            .distinct()
-            .all()]
+        # Projects where user is a Team Lead or Member
+        # Get all projects from teams user is in
+        team_project_ids = [t.project_id for t in user.teams]
+        led_project_ids = [t.project_id for t in user.led_teams]
             
         # Combine unique project IDs
-        all_ids = list(set(assigned_project_ids + led_project_ids))
+        all_ids = list(set(assigned_project_ids + led_project_ids + team_project_ids))
         
-        projects = db.query(Project).filter(Project.id.in_(all_ids)).all()
+        # Exclude projects user owns as specified
+        projects = db.query(Project).filter(
+            Project.id.in_(all_ids),
+            Project.owner_id != user.id
+        ).all()
+        
     return [
         {
             "id": p.id,
             "name": p.name,
-            "project_prefix": p.project_prefix
+            "project_prefix": p.project_prefix,
+            "owner_id": p.owner_id
         }
         for p in projects
     ]
