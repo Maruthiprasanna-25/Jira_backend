@@ -2,6 +2,10 @@ from typing import Optional
 from app.utils.activity_logger import log_activity
 
 def story_to_dict(s):
+    """
+    Converts a UserStory model instance to a dictionary.
+    Handles None checks for relationships.
+    """
     if not s: return None
     return {
         "id": s.id,
@@ -27,6 +31,17 @@ def story_to_dict(s):
     }
 
 def track_change(db, story, user_id, field, old_value, new_value):
+    """
+    Tracks changes to a story field and logs activity if the value changed.
+    
+    Args:
+        db: Database session
+        story: The user story object
+        user_id: ID of the user making changes
+        field: Name of the changed field
+        old_value: Previous value
+        new_value: New value
+    """
     norm_old = "" if old_value is None else str(old_value).strip()
     norm_new = "" if new_value is None else str(new_value).strip()
     if field in ["start_date", "end_date"]:

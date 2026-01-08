@@ -35,8 +35,15 @@ app.include_router(api_router)
 
 @app.on_event("startup")
 def startup_event():
+    """
+    Execute startup tasks.
+    Creates default admin user if not present.
+    """
     create_default_admin()
 
 @app.get("/")
 def root():
+    """
+    Root endpoint for health check.
+    """
     return {"message": f"Welcome to {settings.PROJECT_NAME}"}

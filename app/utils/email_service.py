@@ -1,7 +1,17 @@
+import logging
 from .config_mail import conf
 from fastapi_mail import FastMail, MessageSchema, MessageType
 
+logger = logging.getLogger(__name__)
+
 async def send_reset_email(email_to: str, reset_link: str):
+    """
+    Sends a password reset email using FastAPI-Mail.
+    
+    Args:
+        email_to: Recipient email address
+        reset_link: The password reset URL
+    """
 
     message = MessageSchema(
         subject="Reset Your Password",
@@ -16,7 +26,7 @@ async def send_reset_email(email_to: str, reset_link: str):
     try:
         fm = FastMail(conf)
         await fm.send_message(message)
-        print("📧 EMAIL SENT SUCCESSFULLY")
+        logger.info("📧 EMAIL SENT SUCCESSFULLY")
 
     except Exception as e:
-        print("❌ EMAIL FAILED:", e)
+        logger.error(f"❌ EMAIL FAILED: {e}")

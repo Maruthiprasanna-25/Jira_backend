@@ -22,6 +22,10 @@ def create_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Creates a new team.
+    Restricted to Admins and Project Leads.
+    """
     if not is_project_lead(current_user, team_data.project_id, db):
         raise HTTPException(
             status_code=403,
@@ -57,6 +61,9 @@ def get_all_teams(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves all teams in the system.
+    """
     return team_service.get_all_teams(db)
 
 @router.get("/project/{project_id}")
@@ -65,6 +72,9 @@ def get_project_teams(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves all teams for a specific project.
+    """
     return team_service.get_teams_by_project(db, project_id)
 
 @router.get("/{team_id}")
@@ -73,6 +83,9 @@ def get_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves details of a specific team.
+    """
     return team_service.get_team(db, team_id)
 
 @router.put("/{team_id}")
@@ -82,6 +95,10 @@ def update_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Updates an existing team.
+    Restricted to Admins and Project Leads.
+    """
     team_model = db.query(Team).filter(Team.id == team_id).first()
     if not team_model:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -126,6 +143,10 @@ def delete_team(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Deletes a team.
+    Restricted to Admins.
+    """
     if not is_admin(current_user):
         raise HTTPException(
             status_code=403,

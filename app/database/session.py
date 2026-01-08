@@ -13,6 +13,10 @@ SessionLocal = sessionmaker(
 )
 
 def get_db():
+    """
+    Database session dependency.
+    Yields a database session and ensures it is closed after request.
+    """
     db = SessionLocal()
     try:
         yield db

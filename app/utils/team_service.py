@@ -4,6 +4,10 @@ from app.models import Team, User, Project
 from app.schemas import TeamCreate, TeamUpdate
 
 def team_to_dict(t):
+    """
+    Converts a Team model instance to a dictionary.
+    Includes eager-loaded relationships if available.
+    """
     if not t: return None
     return {
         "id": t.id,
@@ -33,6 +37,19 @@ def team_to_dict(t):
     }
 
 def create_team(db: Session, team_data: TeamCreate):
+    """
+    Creates a new team.
+    
+    Args:
+        db: Database session
+        team_data: Team creation data (name, project_id, etc.)
+        
+    Returns:
+        dict: The created team
+        
+    Raises:
+        HTTPException: If project/lead not found or member validation fails
+    """
     # Verify project exists
     project = db.query(Project).filter(Project.id == team_data.project_id).first()
     if not project:
@@ -70,16 +87,53 @@ def create_team(db: Session, team_data: TeamCreate):
     return team_to_dict(result)
 
 def get_team(db: Session, team_id: int):
+    """
+    Retrieves a team by ID.
+    
+    Args:
+        db: Database session
+        team_id: Team ID
+        
+    Returns:
+        dict: The team data
+        
+    Raises:
+        HTTPException: If team not found
+    """
     team = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).filter(Team.id == team_id).first()
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
     return team_to_dict(team)
 
 def get_teams_by_project(db: Session, project_id: int):
+    """
+    Retrieves all teams associated with a project.
+    
+    Args:
+        db: Database session
+        project_id: Project ID
+        
+    Returns:
+        list: List of team dictionaries
+    """
     teams = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).filter(Team.project_id == project_id).all()
     return [team_to_dict(t) for t in teams]
 
 def update_team(db: Session, team_id: int, team_update: TeamUpdate):
+    """
+    Updates an existing team.
+    
+    Args:
+        db: Database session
+        team_id: Team ID
+        team_update: Data to update
+        
+    Returns:
+        dict: Updated team data
+        
+    Raises:
+        HTTPException: If team not found
+    """
     # Fetch the Team model directly (not the dict from get_team)
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
@@ -110,6 +164,19 @@ def update_team(db: Session, team_id: int, team_update: TeamUpdate):
     return team_to_dict(updated_team)
 
 def delete_team(db: Session, team_id: int):
+    """
+    Deletes a team.
+    
+    Args:
+        db: Database session
+        team_id: Team ID
+        
+    Returns:
+        bool: True if deleted
+        
+    Raises:
+        HTTPException: If team not found
+    """
     team = db.query(Team).filter(Team.id == team_id).first()
 
     if not team:
@@ -122,5 +189,8 @@ def delete_team(db: Session, team_id: int):
 
 
 def get_all_teams(db: Session):
+    """
+    Retrieves all teams in the system.
+    """
     teams = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).all()
     return [team_to_dict(t) for t in teams]

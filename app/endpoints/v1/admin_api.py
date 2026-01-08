@@ -15,8 +15,12 @@ def admin_get_all_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only ADMIN can view all users")
+    """
+    Retrieves all users for the admin dashboard.
+    Only accessible by Master Admin.
+    """
+    if not current_user.is_master_admin:
+        raise HTTPException(status_code=403, detail="Only Master Admin can view all users")
     
     users = db.query(User).all()
     return [
@@ -38,8 +42,12 @@ def update_user_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only ADMIN can change user roles")
+    """
+    Updates a user's role.
+    Only Master Admin can perform this action.
+    """
+    if not current_user.is_master_admin:
+        raise HTTPException(status_code=403, detail="Only Master Admin can change user roles")
     
     new_role = new_role.upper()
     if new_role not in ALLOWED_ROLES:

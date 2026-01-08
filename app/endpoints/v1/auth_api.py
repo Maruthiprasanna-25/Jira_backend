@@ -28,6 +28,10 @@ def signup(
     request: SignupRequest,
     db: Session = Depends(get_db)
 ):
+    """
+    Registers a new user with the specified role.
+    Checks if email already exists and enforces validation.
+    """
     allowed_roles = ["DEVELOPER", "TESTER"]
     
     if request.role not in allowed_roles:
@@ -63,6 +67,10 @@ def get_all_users(
     return db.query(User).all()
 
 def perform_login(email: str, password: str, db: Session):
+    """
+    Validates credentials and generates an access token.
+    Handles view mode logic for promoted admins.
+    """
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -92,6 +100,9 @@ def login(
     request: LoginRequest,
     db: Session = Depends(get_db)
 ):
+    """
+    Authenticates a user and returns a JWT token.
+    """
     return perform_login(request.email, request.password, db)
 
 @router.post("/token")
@@ -104,6 +115,9 @@ def login_for_access_token(
 
 @router.get("/me")
 def my_profile(user: User = Depends(get_current_user)):
+    """
+    Retrieves the current authenticated user's profile.
+    """
     return {
         "id": user.id,
         "username": user.username,
@@ -121,6 +135,10 @@ def switch_mode(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Switches the current user's view mode (Admin/Developer).
+    Master Admin cannot switch modes.
+    """
     if user.is_master_admin:
         raise HTTPException(400, "Master Admin cannot switch modes")
     
@@ -131,25 +149,39 @@ def switch_mode(
     db.commit()
     return {"message": f"Switched to {mode} mode", "view_mode": user.view_mode}
 
+@router.post("/verify-password")
+def verify_current_password(
+    password: str = Form(...),
+    user: User = Depends(get_current_user)
+):
+    """
+    Verifies the current user's password (e.g., before sensitive actions).
+    """
+    if not verify_password(password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    return {"valid": True}
+
 @router.put("/me")
 def update_profile(
     username: Optional[str] = Form(None),
-    email: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
+    current_password: Optional[str] = Form(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if email:
-        validate_lowercase_email(email)
-        existing = db.query(User).filter(User.email == email.lower()).first()
-        if existing and existing.id != user.id:
-            raise HTTPException(400, detail="Email already in use")
-        user.email = email.lower()
-    
+    """
+    Updates the calling user's profile (Username, Password).
+    Requires current password to change password.
+    """
     if username:
         user.username = username
     
     if password:
+        if not current_password:
+            raise HTTPException(400, "Current password is required to set a new password")
+        if not verify_password(current_password, user.hashed_password):
+            raise HTTPException(401, "Invalid current password")
+            
         validate_password(password)
         user.hashed_password = hash_password(password)
     
@@ -163,6 +195,9 @@ def upload_avatar(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Uploads a profile picture for the current user.
+    """
     UPLOAD_DIR = os.path.join(settings.UPLOAD_DIR, "avatars")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     
@@ -182,6 +217,9 @@ def delete_profile_pic(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Removes the current user's profile picture.
+    """
     user.profile_pic = None
     db.commit()
     return {"message": "Profile picture removed"}

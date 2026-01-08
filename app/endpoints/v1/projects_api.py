@@ -17,6 +17,10 @@ def create_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Creates a new project.
+    Only accessible in Admin mode.
+    """
     # Check if user is in ADMIN mode
     # Master Admin is always in ADMIN mode as per auth_api update
     if user.view_mode != "ADMIN":
@@ -40,9 +44,14 @@ def update_project(
     id: int,
     name: Optional[str] = Form(None),
     project_prefix: Optional[str] = Form(None),
+    is_active: Optional[bool] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Updates an existing project.
+    Only Admins can update. Enforces inactive project read-only logic.
+    """
     if user.role != "ADMIN":
         raise HTTPException(403, "Only admins can update projects")
         
@@ -50,10 +59,24 @@ def update_project(
     if not project:
         raise HTTPException(404, "Project not found")
         
+    # Check for Inactive Lock
+    if not project.is_active:
+        # If project is inactive, the ONLY allowed change is to Activate it (is_active=True)
+        # If is_active is True in request, allow it.
+        # If is_active is None or False, and we are trying to change other things, Block it.
+        if is_active is True:
+            # Re-activating. Allow other changes too? Maybe. But strictly, let's allow it.
+            pass
+        else:
+            # Not re-activating.
+            raise HTTPException(403, "Project is inactive. You must activate it to make changes.")
+
     if name is not None:
         project.name = name
     if project_prefix is not None:
         project.project_prefix = project_prefix.upper()
+    if is_active is not None:
+        project.is_active = is_active
         
     db.commit()
     db.refresh(project)
@@ -65,6 +88,10 @@ def delete_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Deletes a project and all its associated stories.
+    Only Admins can delete.
+    """
     if user.role != "ADMIN":
         raise HTTPException(403, "Only admins can delete projects")
     project = db.query(Project).filter(Project.id == id).first()
@@ -76,11 +103,66 @@ def delete_project(
     db.commit()
     return {"message": "Project and all associated data deleted successfully"}
 
+@router.get("/inactive")
+def get_inactive_projects(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    """
+    Retrieves inactive projects based on user role and permissions.
+    """
+    if user.is_master_admin:
+        # Master Admin sees all inactive projects
+        projects = db.query(Project).filter(Project.is_active == False).all()
+    elif user.view_mode == "ADMIN":
+        # ADMIN mode: Shows inactive projects you own
+        projects = db.query(Project).filter(
+            Project.owner_id == user.id,
+            Project.is_active == False
+        ).all()
+    else:
+        # DEVELOPER mode: Shows inactive projects where you're a member/assignee
+        assigned_project_ids = [pid[0] for pid in db.query(UserStory.project_id)
+            .filter(or_(
+                UserStory.assignee_id == user.id,
+                UserStory.assignee == user.username,
+                UserStory.assignee == user.email
+            ))
+            .distinct()
+            .all()]
+        
+        team_project_ids = [t.project_id for t in user.teams]
+        led_project_ids = [t.project_id for t in user.led_teams]
+            
+        all_ids = list(set(assigned_project_ids + led_project_ids + team_project_ids))
+        
+        projects = db.query(Project).filter(
+            Project.id.in_(all_ids),
+            Project.owner_id != user.id,
+            Project.is_active == False
+        ).all()
+        
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "project_prefix": p.project_prefix,
+            "owner_id": p.owner_id,
+            "is_active": p.is_active
+        }
+        for p in projects
+    ]
+
 @router.get("")
 def get_projects(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves active projects viewable by the user.
+    Admins see their owned projects.
+    Developers see projects they are assigned to or members of.
+    """
     if user.is_master_admin:
         # Master Admin sees everything
         projects = db.query(Project).all()
@@ -119,7 +201,8 @@ def get_projects(
             "id": p.id,
             "name": p.name,
             "project_prefix": p.project_prefix,
-            "owner_id": p.owner_id
+            "owner_id": p.owner_id,
+            "is_active": p.is_active
         }
         for p in projects
     ]

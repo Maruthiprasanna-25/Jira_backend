@@ -4,9 +4,19 @@ from app.models import User, UserStory, Team, Project
 
 def check_issue_permission(user: User, resource, action: str, db: Session = None):
     """
-    Centralized permission check.
-    resource: instance of UserStory (or None for creation checks that depend on input)
-    action: "create", "read", "update", "delete"
+    Centralized permission check logic for issues.
+    
+    Args:
+        user: The user requesting access
+        resource: instance of UserStory (or None for creation checks)
+        action: "create", "read", "update", "delete"
+        db: Optional database session
+        
+    Returns:
+        bool: True if permitted, otherwise raises HTTPException
+        
+    Raises:
+        HTTPException: If permission denied
     """
     if user.role == "ADMIN":
         return True # Admin has all permissions (except maybe super specific ones, but here All)
@@ -27,53 +37,92 @@ def check_issue_permission(user: User, resource, action: str, db: Session = None
     raise HTTPException(status_code=403, detail="Permission denied")
 
 def can_create_issue(user: User, project_id: int, team_id: int, db: Session):
+    """
+    Checks if a user can create an issue in a project/team.
+    
+    Args:
+        user: The user
+        project_id: Target project ID
+        team_id: Target team ID
+        db: Database session
+        
+    Returns:
+        bool: True if allowed
+    """
+    if user.role == "ADMIN":
+        # Even Admins shouldn't create issues in inactive projects? 
+        # Requirement: "no options to make any changes". Implies strict lock.
+        # But Admin might need to override? Usually Inactive = Locked for everyone until active.
+        # Let's check project status for everyone.
+        pass
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project or not project.is_active:
+        return False
+
     if user.role == "ADMIN":
         return True
     
     # Team Lead Check
-    # Must be lead of the team they are assigning to?
-    # Or just lead of ANY team in the project?
-    # "create ... user story ... that belongs to their team"
-    # So they must be the Lead of the `team_id` passed.
-    
     if not team_id:
-        # If no team is assigned, can a Team Lead create it?
-        # Maybe? But then it doesn't "belong to their team".
-        # Let's enforce that Non-Admins MUST specify a team they lead to create an issue.
-        # OR, if they create it, it auto-assigns to their team.
-        return False # Force Team specification or check led_teams
+        return False 
     
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
         return False
         
     if team.lead_id == user.id:
-        # Check if team belongs to project?
         if team.project_id != project_id:
-             return False # Mismatch or trying to create in other project
+             return False 
         return True
         
     return False
 
 def can_update_issue(user: User, story: UserStory, db: Session):
+    """
+    Checks if a user can update a specific issue.
+    
+    Args:
+        user: The user
+        story: The user story to update
+        db: Database session
+        
+    Returns:
+        bool: True if allowed
+    """
+    if not story.project.is_active:
+        return False
+
     if user.role == "ADMIN":
         return True
     
     # Team Lead
-    # If story belongs to a team the user leads
     if story.team_id:
         team = db.query(Team).filter(Team.id == story.team_id).first()
         if team and team.lead_id == user.id:
             return True
         
     # Team Member (or Lead acting as Member)
-    # Can update if explicitly assigned to them
     if story.assignee_id == user.id:
         return True
         
     return False
 
 def can_delete_issue(user: User, story: UserStory, db: Session):
+    """
+    Checks if a user can delete a specific issue.
+    
+    Args:
+        user: The user
+        story: The user story to delete
+        db: Database session
+        
+    Returns:
+        bool: True if allowed
+    """
+    if not story.project.is_active:
+        return False
+
     if user.role == "ADMIN":
         return True
     
@@ -86,6 +135,17 @@ def can_delete_issue(user: User, story: UserStory, db: Session):
     return False
 
 def can_view_issue(user: User, story: UserStory, db: Session):
+    """
+    Checks if a user can view a specific issue.
+    
+    Args:
+        user: The user
+        story: The user story to view
+        db: Database session
+        
+    Returns:
+        bool: True if allowed
+    """
     if user.role == "ADMIN":
         return True
         
@@ -127,9 +187,15 @@ def can_view_issue(user: User, story: UserStory, db: Session):
         
     return False
 def is_admin(user: User):
+    """
+    Simple check if user is an ADMIN.
+    """
     return user.role == "ADMIN"
 
 def is_project_lead(user: User, project_id: int, db: Session):
+    """
+    Checks if user is a lead in a specific project.
+    """
     if is_admin(user):
         return True
     
@@ -141,6 +207,9 @@ def is_project_lead(user: User, project_id: int, db: Session):
     return db.query(Team).filter(Team.project_id == project_id, Team.lead_id == user.id).count() > 0
 
 def can_manage_team_members(user: User, team: Team, db: Session):
+    """
+    Checks if user can manage members of a team.
+    """
     if is_admin(user):
         return True
     # Can manage if they are the lead of this specific team OR a lead of any team in this project

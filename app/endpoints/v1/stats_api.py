@@ -17,6 +17,10 @@ def get_master_admin_summary(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves statistical summary for the Master Admin dashboard.
+    Includes total projects, admin breakdown, and weekly project creation stats.
+    """
     if not user.is_master_admin:
         raise HTTPException(status_code=403, detail="Only Master Admin can access dashboard statistics")
 
@@ -84,6 +88,10 @@ def get_mode_switch_history(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves history of mode switch requests.
+    Only accessible by Master Admin.
+    """
     if not user.is_master_admin:
         raise HTTPException(status_code=403, detail="Only Master Admin can access history")
 

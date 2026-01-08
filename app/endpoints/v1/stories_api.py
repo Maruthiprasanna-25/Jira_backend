@@ -5,7 +5,6 @@ from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-
 from app.database.session import get_db
 from app.models import Project, UserStory, User
 from app.auth.dependencies import get_current_user
@@ -21,11 +20,13 @@ from sqlalchemy.exc import SQLAlchemyError
 router = APIRouter(prefix="/user-stories", tags=["user-stories"])
 
 def _validate_hierarchy(db: Session, parent_id: Optional[int], issue_type: str, current_issue_id: Optional[int] = None):
+    """
+    Validates parent-child relationships between issues.
+    Prevents circular dependencies and incorrect hierarchy (e.g., Epic -> Story -> Task).
+    """
     if not parent_id:
-        if issue_type == "Story":
-             raise HTTPException(400, "Story must belong to an Epic (parent_issue_id required).")
-        if issue_type == "Task":
-             raise HTTPException(400, "Task must belong to a Story (parent_issue_id required).")
+        # Relaxed rules: Stories and Tasks can be orphans (no parent).
+        # Subtasks must still have a parent? Let's check.
         if issue_type == "Subtask":
              raise HTTPException(400, "Subtask must belong to a Task (parent_issue_id required).")
         return
@@ -66,6 +67,9 @@ def _validate_hierarchy(db: Session, parent_id: Optional[int], issue_type: str, 
          raise HTTPException(400, f"Bug must be a child of a Story or Task, not {ptype}.")
 
 def _generate_story_code(db: Session, project_id: int) -> str:
+    """
+    Generates a unique story code in the format PREFIX-0001.
+    """
     # Fetch Project to get prefix
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
@@ -104,6 +108,9 @@ def _generate_story_code(db: Session, project_id: int) -> str:
 
 # Aggregated Activity Log Helper
 def _log_activity_aggregated(db: Session, story_id: int, user_id: Optional[int], action: str, changes_dict: dict):
+    """
+    Logs changes to a story in an aggregated format (one entry per update transaction).
+    """
     if not changes_dict and action == "UPDATED":
         return
 
@@ -150,7 +157,6 @@ def search_stories(
         or_(
             UserStory.title.ilike(f"%{q}%"),
             UserStory.story_pointer.ilike(f"%{q}%"),
-            # UserStory.description.ilike(f"%{q}%") # Optional, maybe too heavy
         )
     )
     
@@ -160,9 +166,6 @@ def search_stories(
     if user.role != "ADMIN":
         led_ids = [t.project_id for t in user.led_teams]
         member_team_ids = [t.id for t in user.teams]
-        # This is getting complex to replicate 1:1.
-        # Let's filter post-query or add constraints.
-        
         assigned_project_ids = [pid[0] for pid in db.query(UserStory.project_id).filter(UserStory.assignee_id == user.id).distinct().all()]
         
         query = query.filter(
@@ -248,6 +251,10 @@ def create_user_story(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Creates a new user story/issue.
+    Validates permissions, hierarchy, and handles file uploads.
+    """
     # Manual conversion for empty strings
     def parse_optional_int(val):
         if not val or (isinstance(val, str) and not val.strip()):
@@ -264,16 +271,19 @@ def create_user_story(
     if user.role == "OTHER":
         raise HTTPException(403, "Read-only access for this role")
     
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+        
+    if not project.is_active:
+        raise HTTPException(403, "The project is inactive.")
+
     if not can_create_issue(user, project_id, parsed_team_id, db):
         raise HTTPException(403, "Insufficient permissions to create issue in this context. Team Leads must specify their team.")
 
     # Hierarchy Logic
     type_str = issue_type.value if issue_type else None
     _validate_hierarchy(db, parsed_parent_issue_id, type_str)
-    
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(404, "Project not found")
 
     # Generate Code
     try:
@@ -330,6 +340,9 @@ def create_user_story(
 
 @router.get("/{id}/history", response_model=List[UserStoryActivityResponse])
 def get_story_history(id: int, db: Session = Depends(get_db)):
+    """
+    Retrieves the activity history of a story.
+    """
     from app.models.story import UserStoryActivity
     return db.query(UserStoryActivity).filter(UserStoryActivity.story_id == id).order_by(UserStoryActivity.created_at.desc()).all()
 
@@ -338,6 +351,11 @@ def get_all_stories(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves all user stories accessible to the user.
+    Admins see stories in owned projects.
+    Developers see stories assigned to them or in their teams/projects.
+    """
     if user.is_master_admin:
         stories = db.query(UserStory).all()
     elif user.view_mode == "ADMIN":
@@ -378,6 +396,9 @@ def get_stories_by_project(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves all stories in a specific project.
+    """
     query = db.query(UserStory).filter(UserStory.project_id == project_id)
     
     if user.role != "ADMIN":
@@ -404,6 +425,9 @@ def get_story_by_id(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves a specific story by ID.
+    """
     story = db.query(UserStory).filter(UserStory.id == id).first()
     if not story:
         raise HTTPException(404, "Story not found")
@@ -430,9 +454,16 @@ def update_story(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Updates an existing story.
+    Logs activity and sends notifications for key changes.
+    """
     story = db.query(UserStory).filter(UserStory.id == id).first()
     if not story:
         raise HTTPException(404, "Story not found")
+        
+    if not story.project.is_active:
+        raise HTTPException(403, "The project is inactive.")
     
     if not can_update_issue(user, story, db):
         raise HTTPException(403, "No permission to edit this issue.")
@@ -586,6 +617,9 @@ def get_my_assigned_stories(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves stories assigned to the current user.
+    """
     stories = db.query(UserStory).filter(UserStory.assignee_id == user.id).all()
     return [story_to_dict(s) for s in stories]
 
@@ -595,9 +629,17 @@ def delete_user_story(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Deletes a story.
+    Checks for project status (read-only if inactive).
+    """
     story = db.query(UserStory).filter(UserStory.id == id).first()
     if not story:
         raise HTTPException(404, "Story not found")
+        
+    if not story.project.is_active:
+        raise HTTPException(403, "The project is inactive.")
+        
     db.delete(story)
     db.commit()
     return {"message": "Story deleted successfully"}
@@ -611,6 +653,9 @@ def get_project_board(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves the project board data (Epics and nested issues).
+    """
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
          raise HTTPException(404, "Project not found")

@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
+    """
+    Application configuration settings.
+    Loads from environment variables with defaults.
+    """
     PROJECT_NAME: str = "Jira-like Backend API"
     PROJECT_VERSION: str = "1.0.0"
     

@@ -14,6 +14,19 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ):
+    """
+    Dependency to get the current authenticated user from JWT token.
+    
+    Args:
+        credentials: Bearer token credentials
+        db: Database session
+        
+    Returns:
+        User: The authenticated user instance
+        
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
     token = credentials.credentials
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -31,6 +44,15 @@ def get_current_user(
 
 
 def require_role(role: str):
+    """
+    Dependency factory to require a specific user role.
+    
+    Args:
+        role: The role to require (e.g. 'ADMIN')
+        
+    Returns:
+        function: Dependency function that checks user role
+    """
     def checker(user: User = Depends(get_current_user)):
         if user.role != role:
             raise HTTPException(

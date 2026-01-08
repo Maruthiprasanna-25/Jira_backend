@@ -11,6 +11,21 @@ def log_activity(
     old_value: str = None,
     new_value: str = None
 ):
+    """
+    Logs an activity/change for a user story.
+    
+    Args:
+        db: Database session
+        issue_id: ID of the user story
+        user_id: ID of the user performing the action
+        action_type: Type of action (e.g. 'updated', 'commented')
+        field_changed: Optional field name that changed
+        old_value: Previous value of the field
+        new_value: New value of the field
+        
+    Returns:
+        UserStoryActivity: The created activity log entry
+    """
     changes = []
     if field_changed:
         changes.append(f"{field_changed}: {old_value} -> {new_value}")

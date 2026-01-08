@@ -24,6 +24,10 @@ def request_password_reset(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
+    """
+    Initiates password reset process.
+    Sends an email with a reset link if the account exists.
+    """
     user = db.query(User).filter(User.email == email.lower()).first()
     if not user:
         return {"message": "If account exists, a reset link was sent"}
@@ -62,6 +66,9 @@ def reset_password(
     data: ResetPasswordRequest,
     db: Session = Depends(get_db)
 ):
+    """
+    Resets the user's password using a valid token.
+    """
     validate_password(data.new_password)
     hashed_token = hashlib.sha256(data.token.encode()).hexdigest()
 

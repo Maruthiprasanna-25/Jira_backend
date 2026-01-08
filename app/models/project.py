@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database.base import Base
@@ -12,6 +12,7 @@ class Project(Base):
     project_prefix = Column(String(5), nullable=False)
     current_story_number = Column(Integer, default=1)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Temporarily nullable for migration
+    is_active = Column(Boolean, default=True, nullable=False)
 
     stories = relationship(
         "UserStory",

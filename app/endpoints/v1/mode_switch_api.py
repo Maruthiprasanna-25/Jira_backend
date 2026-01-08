@@ -16,6 +16,10 @@ def create_switch_request(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Submits a request to switch view mode (Admin <-> Developer).
+    Notifies Master Admin.
+    """
     requested_mode = request_data.requested_mode
     reason = request_data.reason
     if user.is_master_admin:
@@ -61,6 +65,10 @@ def get_all_requests(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Retrieves all pending mode switch requests.
+    Only accessible by Master Admin.
+    """
     if not user.is_master_admin:
         raise HTTPException(403, "Only Master Admin can view requests")
     
@@ -88,6 +96,10 @@ def approve_request(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Approves a mode switch request and updates user role/view mode.
+    Only accessible by Master Admin.
+    """
     if not user.is_master_admin:
         raise HTTPException(403, "Only Master Admin can approve requests")
     
@@ -121,6 +133,10 @@ def reject_request(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
+    """
+    Rejects a mode switch request.
+    Only accessible by Master Admin.
+    """
     if not user.is_master_admin:
         raise HTTPException(403, "Only Master Admin can reject requests")
     

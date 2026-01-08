@@ -12,7 +12,7 @@ __all__ = [
     "Project",
     "Team",
     "UserStory",
-    "ActivityLog",
+    "UserStoryActivity",
     "team_members",
     "ModeSwitchRequest"
 ]

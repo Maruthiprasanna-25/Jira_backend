@@ -21,6 +21,15 @@ pwd_context = CryptContext(
 # ---------------- PASSWORD VALIDATION ---------------- #
 
 def validate_password(password: str):
+    """
+    Validates password strength requirements.
+    
+    Args:
+        password: The password string to validate
+        
+    Raises:
+        HTTPException: If password doesn't meet requirements
+    """
     if len(password) < 8:
         raise HTTPException(
             status_code=400,
@@ -52,6 +61,15 @@ def validate_password(password: str):
         )
 
 def validate_lowercase_email(email: str):
+    """
+    Validates that the email is in lowercase.
+    
+    Args:
+        email: The email string to check
+        
+    Raises:
+        HTTPException: If email contains uppercase characters
+    """
     if email != email.lower():
         raise HTTPException(
             status_code=400,
@@ -61,9 +79,31 @@ def validate_lowercase_email(email: str):
 # ---------------- PASSWORD HASHING ---------------- #
 
 def hash_password(password: str) -> str:
+    """
+    Hashes a password using the configured context.
+    
+    Args:
+        password: The plain text password
+        
+    Returns:
+        str: The hashed password
+    """
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed_password: str) -> bool:
+    """
+    Verifies a plain password against a hash.
+    
+    Args:
+        password: The plain text password
+        hashed_password: The stored hash
+        
+    Returns:
+        bool: True if password matches, False otherwise
+        
+    Raises:
+        HTTPException: If hash in database is invalid/unknown
+    """
     try:
         return pwd_context.verify(password, hashed_password)
     except UnknownHashError:
@@ -76,6 +116,15 @@ def verify_password(password: str, hashed_password: str) -> bool:
 # ---------------- JWT TOKEN ---------------- #
 
 def create_access_token(data: dict):
+    """
+    Creates a JWT access token with expiration.
+    
+    Args:
+        data: Payload data to include in the token
+        
+    Returns:
+        str: Encoded JWT token
+    """
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
