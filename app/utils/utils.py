@@ -22,7 +22,8 @@ def story_to_dict(s):
         "status": s.status,
         "support_doc": s.support_doc,
         "start_date": str(s.start_date) if s.start_date else None,
-        "end_date": str(s.end_date) if s.end_date else None
+        "end_date": str(s.end_date) if s.end_date else None,
+        "parent_issue_id": s.parent_issue_id
     }
 
 def track_change(db, story, user_id, field, old_value, new_value):

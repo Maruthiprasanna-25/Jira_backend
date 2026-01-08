@@ -49,17 +49,29 @@ class UserStory(Base):
     assignee_user = relationship("User", foreign_keys=[assignee_id])
     team = relationship("Team", back_populates="stories")
 
-class ActivityLog(Base):
-    __tablename__ = "activity_logs"
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True) # key for RBAC ownership
+    
+    # Hierarchy
+    parent_issue_id = Column(Integer, ForeignKey("user_story.id", ondelete="CASCADE"), nullable=True)
+    parent = relationship("UserStory", remote_side=[id], backref="children")
+
+class UserStoryActivity(Base):
+    """
+    Aggregated activity log for user story changes.
+    Each record represents ONE save action with multiple field changes.
+    """
+    __tablename__ = "user_story_activity"
 
     id = Column(Integer, primary_key=True, index=True)
-
-    issue_id = Column(Integer, ForeignKey("user_story.id", ondelete="CASCADE"))
+    story_id = Column(Integer, ForeignKey("user_story.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-
-    action_type = Column(String(50), nullable=False)
-    field_changed = Column(String(100))
-    old_value = Column(Text)
-    new_value = Column(Text)
-
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    
+    action = Column(String(50), nullable=False, default="UPDATED")  # UPDATED, CREATED, STATUS_CHANGED, etc.
+    changes = Column(Text, nullable=False)  # Human-readable text description of changes
+    change_count = Column(Integer, nullable=False, default=0)  # Number of fields changed
+    
+    created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
+    
+    # Relationships
+    story = relationship("UserStory", backref="activities")
+    user = relationship("User")
