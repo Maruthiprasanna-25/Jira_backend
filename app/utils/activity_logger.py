@@ -1,5 +1,6 @@
-from app.models import ActivityLog
+from app.models.story import UserStoryActivity
 from sqlalchemy.orm import Session
+from typing import Optional
 
 def log_activity(
     db: Session,
@@ -10,13 +11,18 @@ def log_activity(
     old_value: str = None,
     new_value: str = None
 ):
-    log = ActivityLog(
-        issue_id=issue_id,
+    changes = []
+    if field_changed:
+        changes.append(f"{field_changed}: {old_value} -> {new_value}")
+    
+    changes_text = "\n".join(changes) if changes else action_type
+
+    log = UserStoryActivity(
+        story_id=issue_id,
         user_id=user_id,
-        action_type=action_type,
-        field_changed=field_changed,
-        old_value=str(old_value) if old_value else None,
-        new_value=str(new_value) if new_value else None,
+        action=action_type,
+        changes=changes_text,
+        change_count=1 if field_changed else 0
     )
 
     db.add(log)

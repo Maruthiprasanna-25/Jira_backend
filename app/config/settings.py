@@ -7,7 +7,7 @@ class Settings:
     PROJECT_NAME: str = "Jira-like Backend API"
     PROJECT_VERSION: str = "1.0.0"
     
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "mysql+pymysql://root:jyothi3@localhost/user_story_db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "mysql+pymysql://root:Mysql%4012345@localhost/user_story_db")
     
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key")
     ALGORITHM: str = "HS256"

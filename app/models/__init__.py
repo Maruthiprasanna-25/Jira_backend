@@ -1,6 +1,6 @@
 from app.models.user import User, PasswordResetToken, Notification
 from app.models.project import Project, Team
-from app.models.story import UserStory, ActivityLog
+from app.models.story import UserStory, UserStoryActivity
 from app.models.common import team_members
 
 # Export everything for easy access
@@ -11,6 +11,6 @@ __all__ = [
     "Project",
     "Team",
     "UserStory",
-    "ActivityLog",
+    "UserStoryActivity",
     "team_members"
 ]
