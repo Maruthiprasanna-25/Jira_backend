@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models import User
 from app.auth.dependencies import get_current_user
+from app.constants import ErrorMessages
+from app.utils.common import get_object_or_404
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -53,9 +55,7 @@ def update_user_role(
     if new_role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid role. Allowed roles: {ALLOWED_ROLES}")
     
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    user = get_object_or_404(db, User, user_id, ErrorMessages.USER_NOT_FOUND)
     
     if user.id == current_user.id and new_role != "ADMIN":
         raise HTTPException(status_code=400, detail="Admin cannot remove their own ADMIN role")

@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models import Notification
+from app.constants import ErrorMessages
+from app.utils.common import get_object_or_404
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -17,9 +19,7 @@ def mark_as_read(notification_id: int, db: Session = Depends(get_db)):
     """
     Marks a notification as read.
     """
-    notification = db.query(Notification).filter(Notification.id == notification_id).first()
-    if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+    notification = get_object_or_404(db, Notification, notification_id, ErrorMessages.NOTIFICATION_NOT_FOUND)
     notification.is_read = True
     db.commit()
     return {"message": "Marked as read"}

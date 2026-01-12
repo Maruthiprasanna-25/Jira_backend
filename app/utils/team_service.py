@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException
 from app.models import Team, User, Project
 from app.schemas import TeamCreate, TeamUpdate
+from app.constants import ErrorMessages
+from app.utils.common import get_object_or_404
 
 def team_to_dict(t):
     """
@@ -51,15 +53,11 @@ def create_team(db: Session, team_data: TeamCreate):
         HTTPException: If project/lead not found or member validation fails
     """
     # Verify project exists
-    project = db.query(Project).filter(Project.id == team_data.project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    get_object_or_404(db, Project, team_data.project_id, ErrorMessages.PROJECT_NOT_FOUND)
     
     # Verify lead exists if provided
     if team_data.lead_id:
-        lead = db.query(User).filter(User.id == team_data.lead_id).first()
-        if not lead:
-            raise HTTPException(status_code=404, detail="Team Lead not found")
+        get_object_or_404(db, User, team_data.lead_id, "Team Lead not found")
     
     team = Team(
         name=team_data.name,
@@ -100,9 +98,10 @@ def get_team(db: Session, team_id: int):
     Raises:
         HTTPException: If team not found
     """
+    # We need eager loading here, so custom query still needed, but logic is simplified
     team = db.query(Team).options(joinedload(Team.members), joinedload(Team.lead)).filter(Team.id == team_id).first()
     if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+        raise HTTPException(status_code=404, detail=ErrorMessages.TEAM_NOT_FOUND)
     return team_to_dict(team)
 
 def get_teams_by_project(db: Session, project_id: int):
@@ -135,17 +134,13 @@ def update_team(db: Session, team_id: int, team_update: TeamUpdate):
         HTTPException: If team not found
     """
     # Fetch the Team model directly (not the dict from get_team)
-    team = db.query(Team).filter(Team.id == team_id).first()
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+    team = get_object_or_404(db, Team, team_id, ErrorMessages.TEAM_NOT_FOUND)
     
     if team_update.name:
         team.name = team_update.name
     
     if team_update.lead_id is not None:
-        lead = db.query(User).filter(User.id == team_update.lead_id).first()
-        if not lead:
-             raise HTTPException(status_code=404, detail="New Team Lead not found")
+        get_object_or_404(db, User, team_update.lead_id, "New Team Lead not found")
         team.lead_id = team_update.lead_id
 
     if team_update.member_ids is not None:
@@ -177,10 +172,7 @@ def delete_team(db: Session, team_id: int):
     Raises:
         HTTPException: If team not found
     """
-    team = db.query(Team).filter(Team.id == team_id).first()
-
-    if not team:
-        raise HTTPException(status_code=404, detail="Team not found")
+    team = get_object_or_404(db, Team, team_id, ErrorMessages.TEAM_NOT_FOUND)
 
     db.delete(team)        # ✅ ORM instance
     db.commit()

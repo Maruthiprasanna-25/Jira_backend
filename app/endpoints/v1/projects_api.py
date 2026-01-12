@@ -1,4 +1,3 @@
-
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
@@ -8,6 +7,8 @@ from app.database.session import get_db
 from app.models import Project, UserStory, User, Team
 from app.schemas import ProjectResponse
 from app.auth.dependencies import get_current_user
+from app.constants import ErrorMessages, SuccessMessages
+from app.utils.common import get_object_or_404
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -57,9 +58,8 @@ def update_project(
     Updates an existing project.
     Only project owners in ADMIN mode or master admin can update.
     """
-    project = db.query(Project).filter(Project.id == id).first()
-    if not project:
-        raise HTTPException(404, "Project not found")
+    # Refactored to use generic util
+    project = get_object_or_404(db, Project, id, ErrorMessages.PROJECT_NOT_FOUND)
     
     # Permission check
     if not user.is_master_admin:
@@ -99,9 +99,7 @@ def delete_project(
     Deletes a project and all its associated stories.
     Only project owners in ADMIN mode or master admin can delete.
     """
-    project = db.query(Project).filter(Project.id == id).first()
-    if not project:
-        raise HTTPException(404, "Project not found")
+    project = get_object_or_404(db, Project, id, ErrorMessages.PROJECT_NOT_FOUND)
     
     # Permission check
     if not user.is_master_admin:
@@ -114,7 +112,7 @@ def delete_project(
     db.query(UserStory).filter(UserStory.project_id == id).delete()
     db.delete(project)
     db.commit()
-    return {"message": "Project and all associated data deleted successfully"}
+    return {"message": SuccessMessages.PROJECT_DELETED}
 
 @router.get("/inactive")
 def get_inactive_projects(

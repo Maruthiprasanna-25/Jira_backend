@@ -18,10 +18,9 @@ from app.auth.auth_utils import (
 from app.auth.dependencies import get_current_user
 from app.config.settings import settings
 from app.schemas.user_schema import LoginRequest, SignupRequest
+from app.constants import ErrorMessages, Roles
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-
-ALLOWED_ROLES = ["ADMIN", "DEVELOPER", "TESTER"]
 
 @router.post("/signup")
 def signup(
@@ -32,15 +31,16 @@ def signup(
     Registers a new user with the specified role.
     Checks if email already exists and enforces validation.
     """
-    allowed_roles = ["DEVELOPER", "TESTER"]
+    # Use localized list for signup restrictions if needed, or general constant
+    allowed_signup_roles = [Roles.DEVELOPER, Roles.TESTER]
     
-    if request.role not in allowed_roles:
-        if request.role == "ADMIN":
+    if request.role not in allowed_signup_roles:
+        if request.role == Roles.ADMIN:
             raise HTTPException(status_code=403, detail="ADMIN role cannot be chosen during signup")
-        request.role = "DEVELOPER"
+        request.role = Roles.DEVELOPER
     
     if db.query(User).filter(User.email == request.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail=ErrorMessages.EMAIL_EXISTS)
     
     validate_password(request.password)
     validate_lowercase_email(request.email)
@@ -64,7 +64,8 @@ def get_all_users(
     user: User = Depends(get_current_user)
 ):
     """Retrieve all users to populate assignee lists"""
-    """Retrieve all users to populate assignee lists"""
+    # Filtering out the hardcoded admin email if it exists in settings/logic
+    # Keeping logic as is but note duplication of concept
     return db.query(User).filter(User.email != "admin@jira.local").all()
 
 def perform_login(email: str, password: str, db: Session):
@@ -74,12 +75,12 @@ def perform_login(email: str, password: str, db: Session):
     """
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail=ErrorMessages.INVALID_CREDENTIALS)
     
     # Default view_mode based on role on fresh login
     if not user.is_master_admin:
         # If user is an ADMIN (promoted), default to ADMIN mode. Otherwise DEVELOPER.
-        user.view_mode = "ADMIN" if user.role == "ADMIN" else "DEVELOPER"
+        user.view_mode = Roles.ADMIN if user.role == Roles.ADMIN else Roles.DEVELOPER
         db.commit()
     
     token = create_access_token({
@@ -143,8 +144,8 @@ def switch_mode(
     if user.is_master_admin:
         raise HTTPException(400, "Master Admin cannot switch modes")
     
-    if mode not in ["ADMIN", "DEVELOPER"]:
-        raise HTTPException(400, "Invalid mode")
+    if mode not in [Roles.ADMIN, Roles.DEVELOPER]:
+        raise HTTPException(400, ErrorMessages.INVALID_MODE)
         
     user.view_mode = mode
     db.commit()
@@ -159,7 +160,7 @@ def verify_current_password(
     Verifies the current user's password (e.g., before sensitive actions).
     """
     if not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid password")
+        raise HTTPException(status_code=401, detail=ErrorMessages.INVALID_PASSWORD)
     return {"valid": True}
 
 @router.put("/me")
@@ -181,7 +182,7 @@ def update_profile(
         if not current_password:
             raise HTTPException(400, "Current password is required to set a new password")
         if not verify_password(current_password, user.hashed_password):
-            raise HTTPException(401, "Invalid current password")
+            raise HTTPException(401, ErrorMessages.INVALID_CURRENT_PASSWORD)
             
         validate_password(password)
         user.hashed_password = hash_password(password)

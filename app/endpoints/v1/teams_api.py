@@ -13,6 +13,8 @@ from app.auth.permissions import (
     can_manage_team_members
 )
 from app.utils.notification_service import create_notification
+from app.constants import ErrorMessages, SuccessMessages
+from app.utils.common import get_object_or_404
 
 router = APIRouter(prefix="/teams", tags=["Teams"])
 
@@ -29,7 +31,7 @@ def create_team(
     if not is_project_lead(current_user, team_data.project_id, db):
         raise HTTPException(
             status_code=403,
-            detail="Only Admins or Project Leads can create teams"
+            detail=ErrorMessages.ONLY_ADMINS_PROJECT_LEADS
         )
 
     new_team = team_service.create_team(db, team_data)
@@ -99,9 +101,7 @@ def update_team(
     Updates an existing team.
     Restricted to Admins and Project Leads.
     """
-    team_model = db.query(Team).filter(Team.id == team_id).first()
-    if not team_model:
-        raise HTTPException(status_code=404, detail="Team not found")
+    team_model = get_object_or_404(db, Team, team_id, ErrorMessages.TEAM_NOT_FOUND)
 
     old_lead_id = team_model.lead_id
 
@@ -154,4 +154,4 @@ def delete_team(
         )
 
     team_service.delete_team(db, team_id)
-    return {"message": "Team deleted successfully"}
+    return {"message": SuccessMessages.TEAM_DELETED}

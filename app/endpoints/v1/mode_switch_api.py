@@ -7,6 +7,8 @@ from app.database.session import get_db
 from app.models import User, ModeSwitchRequest, Notification
 from app.auth.dependencies import get_current_user
 from app.schemas.user_schema import UserResponse, ModeSwitchRequestSchema
+from app.constants import ErrorMessages
+from app.utils.common import get_object_or_404
 
 router = APIRouter(prefix="/mode-switch", tags=["Mode Switch"])
 
@@ -103,9 +105,7 @@ def approve_request(
     if not user.is_master_admin:
         raise HTTPException(403, "Only Master Admin can approve requests")
     
-    request = db.query(ModeSwitchRequest).filter(ModeSwitchRequest.id == request_id).first()
-    if not request:
-        raise HTTPException(404, "Request not found")
+    request = get_object_or_404(db, ModeSwitchRequest, request_id, ErrorMessages.REQUEST_NOT_FOUND)
     
     if request.status != "PENDING":
         raise HTTPException(400, f"Request is already {request.status}")
@@ -140,9 +140,7 @@ def reject_request(
     if not user.is_master_admin:
         raise HTTPException(403, "Only Master Admin can reject requests")
     
-    request = db.query(ModeSwitchRequest).filter(ModeSwitchRequest.id == request_id).first()
-    if not request:
-        raise HTTPException(404, "Request not found")
+    request = get_object_or_404(db, ModeSwitchRequest, request_id, ErrorMessages.REQUEST_NOT_FOUND)
     
     if request.status != "PENDING":
         raise HTTPException(400, f"Request is already {request.status}")
